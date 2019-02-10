@@ -1,57 +1,39 @@
-from PIL import Image
-import io
 import socket
-from threading import Thread
 import struct
+import time
+import picamera
+import io
 
-
-
-class ImageReceiver():
+class CamSender():
     def __init__(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+        self.sock = socket.socket()
         ipAdress = '192.168.1.59'
-        hostName = socket.gethostbyaddr(ipAdress)
-        print('working on %s with IP %s' % (hostName[0], hostName[2]))
+        hostName = socket.gethostbyaddr(ipAdress)[0]
+        print('connecting to %s with IP %s' % (hostName, ipAdress))
+        self.sock.connect((ipAdress, 23456))
+        self.connection = self.sock.makefile('wb')
 
-        serverAdress = (ipAdress, 23456)
-        print ('starting up on %s port %s' % serverAdress)
-        self.sock.bind(serverAdress)
-
-        self.sock.listen(1)
-        self.image = Image.Image()
-
-    def reciveData(self):
-        print('waiting for a connection')
+    def streamCam(self):
         try:
-            connection = self.sock.accept()[0].makefile('rb')
-            print('connection...')
-            while True:
-                imgLen = struct.unpack('<L', connection.read(struct.calcsize('<L')))[0]
-                if not imgLen:
-                    break
+            with picamera.PiCamera() as camera:
+                camera.resolution = (640, 480)
+                time.sleep(2)
+                stream = io.BytesIO()
 
-                imgStream = io.BytesIO()
-                imgStream.write(connection.read(imgLen))
-                imgStream.seek(0)
-                img = Image.open(imgStream)
-                print('Image is %dx%d' % img.size)
-                img.verify()
-                self.image = img
-                print('Image is verified')
+                for foo in camera.capture_continuous(stream, 'jpeg'):
+                    self.connection.write(struct.pack('<L', stream.tell()))
+                    self.connection.flush()
+                    stream.seek(0)
+                    self.connection.write(stream.read())
+                    stream.seek(0)
+                    stream.truncate()
+            self.connection.write(struct.pack('<L', 0))
         finally:
-            connection.close()
+            self.connection.close()
             self.sock.close()
 
-
-
-
-if __name__ == "__main__":
-    stream = ImageReceiver()
-    receiveThread = Thread(target=stream.reciveData)
-
-    receiveThread.start()
-
-
-
-    receiveThread.join()
+if __name__ == '__main__':
+    cam = CamSender()
+    print('start Streaming...')
+    cam.streamCam()
+    print('End reached')

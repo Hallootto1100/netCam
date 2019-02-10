@@ -1,39 +1,57 @@
 import socket
-import struct
-import time
-import picamera
-import io
+import subprocess
 
-class CamSender():
+
+
+class ImageReceiver():
     def __init__(self):
-        self.sock = socket.socket()
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
         ipAdress = '192.168.1.59'
-        hostName = socket.gethostbyaddr(ipAdress)[0]
-        print('connecting to %s with IP %s' % (hostName, ipAdress))
-        self.sock.connect((ipAdress, 23456))
-        self.connection = self.sock.makefile('wb')
+        hostName = socket.gethostbyaddr(ipAdress)
+        print('working on %s with IP %s' % (hostName[0], hostName[2]))
 
-    def streamCam(self):
+        serverAdress = (ipAdress, 23456)
+        print ('starting up on %s port %s' % serverAdress)
+        self.sock.bind(serverAdress)
+
+        self.sock.listen(1)
+        self.image = Image.Image()
+        self.condition = Condition()
+
+    def reciveData(self):
+        print('waiting for a connection')
         try:
-            with picamera.PiCamera() as camera:
-                camera.resolution = (640, 480)
-                time.sleep(2)
-                stream = io.BytesIO()
+            connection = self.sock.accept()[0].makefile('rb')
+            print('connection...')
+            while True:
 
-                for foo in camera.capture_continuous(stream, 'jpeg'):
-                    self.connection.write(struct.pack('<L', stream.tell()))
-                    self.connection.flush()
-                    stream.seek(0)
-                    self.connection.write(stream.read())
-                    stream.seek(0)
-                    stream.truncate()
-            self.connection.write(struct.pack('<L', 0))
         finally:
-            self.connection.close()
+            connection.close()
             self.sock.close()
 
-if __name__ == '__main__':
-    cam = CamSender()
-    print('start Streaming...')
-    cam.streamCam()
-    print('End reached')
+class ImageDisplay():
+    def __init__(self):
+        print('ImageDisplay initialized')
+
+    def display(self):
+        try:
+            while True:
+                with stream.condition:
+                    stream.condition.wait()
+                    stream.image.show()
+        finally:
+            print('Ende')
+
+
+if __name__ == "__main__":
+    stream = ImageReceiver()
+    receiveThread = Thread(target=stream.reciveData)
+    displayer = ImageDisplay()
+    dispThread = Thread(target=displayer.display)
+
+    receiveThread.start()
+    dispThread.start()
+
+    dispThread.join()
+    receiveThread.join()
